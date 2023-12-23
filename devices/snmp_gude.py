@@ -1,3 +1,4 @@
+import os
 import asyncio
 import traceback
 from functools import cached_property
@@ -9,6 +10,8 @@ from misc import logger, memoize
 
 from .device import DeviceState
 from .icmpable import ICMPable
+
+PDU_COMMUNITYSTRING = os.environ['PDU_COMMUNITYSTRING']
 
 WRITE_POWERFEEDS_TIMEOUT = 900
 
@@ -81,7 +84,7 @@ class GudePDU(ICMPable):
         ip = getattr(self, 'primary_ip')
         address = ip['address'].split('/')[0]
         self.snmp_client = aiosnmp.Snmp(
-            host=address, community='private', timeout=1, retries=1)
+            host=address, community=PDU_COMMUNITYSTRING, timeout=1, retries=1)
 
     @cached_property
     def num_powerfeeds(self):
