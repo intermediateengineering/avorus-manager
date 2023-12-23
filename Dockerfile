@@ -11,7 +11,8 @@ RUN pip install --no-cache-dir --upgrade \
 	pymodbus==3.5.4 \
 	aiohttp==3.8.5 \
 	aiomqtt==1.1.0 \
-	pyyaml==6.0.1
+	pyyaml==6.0.1 \
+	git+https://github.com/worosom/aiopjlink
 RUN pip install --no-cache-dir PyWebOSTV wsaccel
 RUN echo "{}" > /opt/weboscreds.json
 COPY ./aiopjlink-old ./aiopjlink
