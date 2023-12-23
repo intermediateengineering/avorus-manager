@@ -15,6 +15,4 @@ RUN pip install --no-cache-dir --upgrade \
 	git+https://github.com/worosom/aiopjlink
 RUN pip install --no-cache-dir PyWebOSTV wsaccel
 RUN echo "{}" > /opt/weboscreds.json
-COPY ./aiopjlink-old ./aiopjlink
-RUN pip install ./aiopjlink
 WORKDIR /app
