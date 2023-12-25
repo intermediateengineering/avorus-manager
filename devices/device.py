@@ -55,6 +55,10 @@ class Device(EventMixin, ErrorMixin, PowerMixin, CalendarMixin):
             if key.startswith('should'):
                 await getattr(self, f'set_{key}')(False)
         [task.cancel() for task in self.tasks.values()]
+        try:
+            self.lock.release()
+        except:
+            pass
 
     def __getattr__(self, __name: str) -> Callable:
         async def method(*_, **__):
