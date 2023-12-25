@@ -12,6 +12,7 @@ RUN pip install --no-cache-dir --upgrade \
 	aiohttp==3.8.5 \
 	aiomqtt==1.1.0 \
 	pyyaml==6.0.1 \
+	aiosnmp==0.7.2 \
 	git+https://github.com/worosom/aiopjlink
 RUN pip install --no-cache-dir PyWebOSTV wsaccel
 RUN echo "{}" > /opt/weboscreds.json
