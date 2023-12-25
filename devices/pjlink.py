@@ -69,7 +69,14 @@ class PJLink(Device):
     @memoize(10, immediate_key='watch_failed')
     async def _watch(self):
         if await ping_address(self.ip):
-            await self.lock.acquire()
+            try:
+                async with asyncio.timeout(max(self.timeouts.values())):
+                    await self.lock.acquire()
+            except:
+                await self.cancel()
+                self.device = Projector(
+                    self.ip, password=os.environ['PJLINK_PASSWORD'])
+                return
             try:
                 async with self.device as device:
                     await device.authenticate()
