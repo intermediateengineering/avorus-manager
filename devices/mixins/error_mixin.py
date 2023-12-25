@@ -2,6 +2,7 @@ import sys
 import traceback
 import json
 import time
+import asyncio
 from typing import Coroutine
 
 from aiomqtt import Client
@@ -42,9 +43,14 @@ class ErrorMixin:
 
     async def _try_method(self, method, error_cb: Coroutine | None = None, **kwargs):
         try:
-            await method(**kwargs)
-            if error_cb:
-                error_cb.close()
+            if self.timeouts.values():
+                timeout = max(self.timeouts.values())
+            else:
+                timeout = 60
+            async with asyncio.timeout(timeout):
+                await method(**kwargs)
+                if error_cb:
+                    error_cb.close()
         except Exception as e:
             try:
                 self.lock.release()
