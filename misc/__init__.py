@@ -1,3 +1,5 @@
+import os
+import shutil
 import time
 import logging
 import threading
@@ -7,6 +9,10 @@ from functools import reduce
 from typing import Callable, Any
 
 import yaml
+
+
+if not os.path.isfile('./config/config.yml'):
+    shutil.copyfile('./config/base_config.yml', './config/config.yml')
 
 
 logger = logging.getLogger()
@@ -24,7 +30,6 @@ def compare_fields(a: str | list[dict[str, str]], b: str):
         return b in [tag['name'] for tag in a]
     else:
         return a == b
-
 
 def get_config():
     config = {}
