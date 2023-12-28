@@ -1,13 +1,14 @@
 import asyncio
 import os
 
-from aiopjlink import Projector
+from aiopjlink import PJLink as PJLinkInterface, Power
 
 from misc import logger, memoize
 
 from .device import Device, DeviceState
 from .icmpable import ping_address
 
+WATCH_INTERVAL = 10
 WAKE_INTERVAL = 30
 SHUTDOWN_INTERVAL = 30
 
@@ -23,169 +24,195 @@ initial_state = {
 class PJLink(Device):
     _capabilities = ['wake', 'shutdown']
 
-    def __init__(self, *args, max_time_to_wake: float = 900, max_time_to_shutdown=900, **kwargs):
+    def __init__(self, *args, max_time_to_wake: float = 900, max_time_to_shutdown=900, connection_timeout=10, **kwargs):
         super().__init__(*args, **kwargs)
         self._state['should_wake'] = False
         self._state['should_shutdown'] = False
-        self._state['watch_failed'] = False
-        self.reset_state()
+        self._reset_state()
 
         self.timeouts['wake'] = max_time_to_wake
         self.timeouts['shutdown'] = max_time_to_shutdown
+        self.connection_timeout = connection_timeout
 
         self.event.append(self.online_event)
 
         ip = getattr(self, 'primary_ip')
         address = ip['address'].split('/')[0]
         self.ip = address
-        self.device = Projector(
-            address, password=os.environ['PJLINK_PASSWORD'])
+        self.is_open = False
 
         self.update_methods.append(('PJLink watch', self._watch))
 
-    def reset_state(self):
+    async def _get_interface(self):
+        return PJLinkInterface(
+            address=self.ip,
+            password=os.environ['PJLINK_PASSWORD'],
+            timeout=self.connection_timeout)
+
+    def _reset_state(self):
         for key, value in initial_state.items():
             self._state[key] = value
-
-    async def set_power_state(self, power_state):
-        match power_state:
-            case 'on':
-                await self.set_is_online(DeviceState.ON)
-                self._state['warming'] = False
-                self._state['cooling'] = False
-            case 'warming':
-                await self.set_is_online(DeviceState.PARTIAL)
-                self._state['warming'] = True
-                self._state['cooling'] = False
-            case 'cooling':
-                await self.set_is_online(DeviceState.PARTIAL)
-                self._state['warming'] = False
-                self._state['cooling'] = True
-            case 'off':
-                await self.set_is_online(DeviceState.PARTIAL)
-                self._state['warming'] = False
-                self._state['cooling'] = False
-
-    @memoize(10, immediate_key='watch_failed')
-    async def _watch(self):
-        if await ping_address(self.ip):
-            try:
-                async with asyncio.timeout(max(self.timeouts.values())):
-                    await self.lock.acquire()
-            except:
-                await self.cancel()
-                self.device = Projector(
-                    self.ip, password=os.environ['PJLINK_PASSWORD'])
-                return
-            try:
-                async with self.device as device:
-                    await device.authenticate()
-                    power_state = await device.get_power()
-                    await self.set_power_state(power_state)
-                    await self._watch_status(device)
-                    self._state['watch_failed'] = False
-            except Exception as e:
-                self._state['watch_failed'] = True
-                await self._handle_exception(e)
-                self.device = Projector(
-                    self.ip, password=os.environ['PJLINK_PASSWORD'])
-            self.lock.release()
-        else:
-            await self.set_is_online(DeviceState.OFF)
-
-    async def _watch_status(self, device):
-        if 'class' not in self._state:
-            self._state['class'] = await device.get_class()
-        try:
-            errors = await device.get_errors()
-        except:
-            errors = self._state['errors']
-        try:
-            lamps = await device.get_lamps()
-        except:
-            lamps = []
-
-        has_lamps_event = self._state['lamps'] != len(lamps)
-        if has_lamps_event:
-            self._state['lamps'] = lamps
-        else:
-            for i, lamp in enumerate(lamps):
-                for j, value in enumerate(lamp):
-                    if self._state['lamps'][i][j] != value:
-                        self._state['lamps'][i][j] = value
-                        has_lamps_event = True
-        if has_lamps_event:
-            await self.event('lamps', self._state['lamps'])
-
-        has_error_event = False
-        for key, value in errors.items():
-            if key not in self._state['errors'] or self._state['errors'][key] != value:
-                has_error_event = True
-                self._state['errors'][key] = value
-        if has_error_event:
-            await self.event('errors', self._state['errors'])
-
-        if self._state['class'] == 2:
-            try:
-                ires = await device.get_ires()
-                if ires != self._state['ires']:
-                    self._state['ires'] = ires
-                    await self.event('ires', self._state['ires'])
-            except:
-                pass
-
-    async def _wake(self):
-        async with asyncio.timeout(self.timeouts['wake']):
-            while self.should_wake:
-                if self.is_online in [DeviceState.OFF, DeviceState.PARTIAL]:
-                    await self.lock.acquire()
-                    try:
-                        async with self.device as device:
-                            await device.authenticate()
-                            logger.debug(
-                                'Authentication succeeded, set_power on')
-                            await device.set_power('on')
-                    except Exception as e:
-                        await self._handle_exception(e)
-                    self.lock.release()
-                    await asyncio.sleep(WAKE_INTERVAL)
-                elif self.is_online == DeviceState.ON:
-                    await self.set_should_wake(False)
-
-    async def _shutdown(self):
-        async with asyncio.timeout(self.timeouts['shutdown']):
-            while self.should_shutdown:
-                if self.is_online == DeviceState.ON:
-                    logger.debug('Try shutdown %s', self.name)
-                    await self.lock.acquire()
-                    try:
-                        async with self.device as device:
-                            await device.authenticate()
-                            logger.debug(
-                                'Authentication succeeded, set_power off')
-                            await device.set_power('off')
-                            self.power_off(300)
-                    except Exception as e:
-                        await self._handle_exception(e)
-                    self.lock.release()
-                    await asyncio.sleep(SHUTDOWN_INTERVAL)
-                elif self.is_online in [DeviceState.OFF, DeviceState.PARTIAL]:
-                    await self.set_should_shutdown(False)
 
     async def online_event(self, _, event_type, value):
         if event_type == 'is_online':
             await self.set_should_wake(self.should_wake and value != DeviceState.ON)
             await self.set_should_shutdown(self.should_shutdown and value not in [DeviceState.OFF, DeviceState.PARTIAL])
             if value != DeviceState.ON:
-                self.reset_state()
+                self._reset_state()
+
+    async def _open(self):
+        if self._interface is None:
+            self._interface = await self._get_interface()
+        if not self.is_open:
+            try:
+                await self._interface.__aenter__()
+            except:
+                self._interface = await self._get_interface()
+                raise
+            await self.set_is_online(DeviceState.PARTIAL)
+            self.is_open = True
+        return self._interface
+
+    async def _close(self):
+        await self._interface.__aexit__(None, None, None)
+        self.is_open = False
+
+    async def _set_power_state(self, power_state: Power.State):
+        match power_state:
+            case Power.State.ON:
+                await self.set_is_online(DeviceState.ON)
+                self._state['warming'] = False
+                self._state['cooling'] = False
+            case Power.State.WARMING:
+                await self.set_is_online(DeviceState.PARTIAL)
+                self._state['warming'] = True
+                self._state['cooling'] = False
+            case Power.State.COOLING:
+                await self.set_is_online(DeviceState.PARTIAL)
+                self._state['warming'] = False
+                self._state['cooling'] = True
+            case Power.State.OFF:
+                await self.set_is_online(DeviceState.PARTIAL)
+                self._state['warming'] = False
+                self._state['cooling'] = False
+            case _:
+                await self.set_is_online(DeviceState.OFF)
+                self._state['warming'] = False
+                self._state['cooling'] = False
+
+    @memoize(WATCH_INTERVAL)
+    async def _watch(self):
+        if await ping_address(self.ip):
+            await self._open()
+            power_state = await self._interface.power.get()
+            await self._set_power_state(power_state)
+            await self._watch_status(self._interface)
+            await self._close()
+        else:
+            await self.set_is_online(DeviceState.OFF)
+
+    async def _update_errors(self, errors):
+        has_error_event = False
+        for key, value in errors.items():
+            error_name = key.value
+            error_value = value.name.lower()
+            if error_name not in self._state['errors'] or self._state['errors'][key.value] != error_value:
+                has_error_event = True
+                self._state['errors'][error_name] = error_value
+        if has_error_event:
+            await self.event('errors', self._state['errors'])
+
+    async def _update_lamps(self, lamps):
+        has_lamps_event = self._state['lamps'] != len(lamps)
+        if has_lamps_event:
+            self._state['lamps'] = [(hours, int(state.value)) for hours, state in lamps]
+        else:
+            for i, lamp in enumerate(lamps):
+                lamp_hours = lamp[0]
+                lamp_state = int(lamp[1])
+                if lamp_hours != self._state['lamps'][i][0] or self._state['lamps'][i][1] != lamp_state:
+                    self._state['lamps'][i][0] = (lamp_hours, lamp_state)
+                    has_lamps_event = True
+        if has_lamps_event:
+            await self.event('lamps', self._state['lamps'])
+            
+    async def _update_class(self, interface):
+        try:
+            interface_class = await interface.info.pjlink_class()
+            self._state['class'] = interface_class.value
+        except:
+            self._state['class'] = 1
+
+    async def _update_ires(self, interface):
+        try:
+            x, y = await interface.sources.resolution()
+            ires = f'{x}x{y}'
+            if ires != self._state['ires']:
+                self._state['ires'] = ires
+                await self.event('ires', self._state['ires'])
+        except:
+            pass
+
+    async def _watch_status(self, interface):
+        if 'class' not in self._state:
+            await self._update_class(interface)
+        try:
+            errors = await interface.errors.query()
+        except:
+            errors = self._state['errors']
+        try:
+            lamps = await interface.lamps.status()
+        except:
+            lamps = []
+    
+        try:
+            await self._update_lamps(lamps)
+        except Exception as e:
+            await self._handle_exception(e)
+
+        try:
+            await self._update_errors(errors)
+        except Exception as e:
+            await self._handle_exception(e)
+
+        if self._state['class'] == 2:
+            await self._update_ires(interface)
+
+    async def _wake(self):
+        async def inner():
+            await self._open()
+            logger.debug(
+                'Authentication succeeded, set_power on')
+            await self._interface.power.turn_on()
+            await self._close()
+        async with asyncio.timeout(self.timeouts['wake']):
+            while self.should_wake:
+                if self.is_online in [DeviceState.OFF, DeviceState.PARTIAL]:
+                    await self._try_method(inner)
+                    await asyncio.sleep(WAKE_INTERVAL)
+                elif self.is_online == DeviceState.ON:
+                    await self.set_should_wake(False)
+
+    async def _shutdown(self):
+        async def inner():
+            await self._open()
+            logger.debug(
+                'Authentication succeeded, set_power off')
+            await self._interface.power.turn_off()
+            await self._close()
+        async with asyncio.timeout(self.timeouts['shutdown']):
+            while self.should_shutdown:
+                if self.is_online == DeviceState.ON:
+                    logger.debug('Try shutdown %s', self.name)
+                    await self._try_method(inner)
+                    self.power_off(300)
+                    await asyncio.sleep(SHUTDOWN_INTERVAL)
+                elif self.is_online in [DeviceState.OFF, DeviceState.PARTIAL]:
+                    await self.set_should_shutdown(False)
 
     @property
     def should_wake(self) -> bool:
         return self._state['should_wake']
-
-    @property
-    def watch_failed(self) -> bool:
-        return self._state['watch_failed']
 
     async def set_should_wake(self, value: bool):
         self._state['should_wake'] = value
