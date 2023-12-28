@@ -3,7 +3,8 @@ import traceback
 import json
 import time
 import asyncio
-from typing import Coroutine
+from types import CoroutineType, FunctionType
+from typing import Coroutine, Callable
 
 from aiomqtt import Client
 
@@ -41,7 +42,7 @@ class ErrorMixin:
         })
         await self.client.publish('manager/device_event', json_payload)
 
-    async def _try_method(self, method, error_cb: Coroutine | None = None, **kwargs):
+    async def _try_method(self, method, error_cb: Callable | Coroutine | None = None, **kwargs):
         try:
             if self.timeouts.values():
                 timeout = max(self.timeouts.values())
@@ -49,14 +50,16 @@ class ErrorMixin:
                 timeout = 60
             async with asyncio.timeout(timeout):
                 await method(**kwargs)
-                if error_cb:
+                if error_cb and type(error_cb) == CoroutineType:
                     error_cb.close()
         except Exception as e:
             try:
                 self.lock.release()
             except:
                 pass
-            if error_cb:
-                await error_cb
-            logger.exception(self.name)
             await self._handle_exception(e)
+            if error_cb:
+                if type(error_cb) == CoroutineType:
+                    await error_cb
+                elif type(error_cb) == FunctionType:
+                    error_cb()
