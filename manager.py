@@ -3,9 +3,10 @@ import asyncio
 from typing import Any
 
 import requests
+import yaml
 
 from mqtt_client import Client
-from misc import logger, timed, get_device_class
+from misc import get_config, logger, timed, get_device_class
 from tags import Tag
 from locations import Location
 import devices
@@ -53,6 +54,8 @@ class Manager:
         self.lock = asyncio.Lock()
 
     async def setup(self, initial=False):
+        self.config = get_config()
+        self.device_map = self.config['device_map']['value']
         await self.lock.acquire()
         try:
             response = self.api.get('/api/')
@@ -117,12 +120,15 @@ class Manager:
     async def subscribe_device(self, device):
         device_id = device['id']
         device_name = device['name']
-        device_class_name = get_device_class(device)
+        device_class_name = get_device_class(self.device_map, device)
         device_class = getattr(
             devices,
             device_class_name,
             Device
         )
+        if device_id in self.devices and device_class != type(self.devices[device_id]):
+            await self.devices[device_id].cancel()
+            del self.devices[device_id]
         if device_id not in self.devices:
             self.devices[device_id] = device_class(
                 self, self.client, self.device_event, **device)
