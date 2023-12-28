@@ -129,7 +129,7 @@ class Device(EventMixin, ErrorMixin, PowerMixin, CalendarMixin):
             task_name = self.name + name
             if task_name not in self.tasks:
                 task: asyncio.Task = asyncio.create_task(
-                    self._try_method(method))
+                    self._try_method(method, error_cb=self._delete_task(task_name)))
                 self.tasks[task_name] = task
                 task.add_done_callback(self._delete_task(task_name))
 
