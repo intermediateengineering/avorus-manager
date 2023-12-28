@@ -95,23 +95,22 @@ def memoize(interval: float, immediate_key='') -> Callable:
             last_called = last_called_dict[func_hash]
             if last_called['is_running']:
                 return last_called['result']
-            last_called['is_running'] = True
             now = time.time()
             immediate = False
             if immediate_key:
                 immediate = getattr(self, immediate_key)
             is_immediate = immediate != last_called['immediate'] and immediate
-            # if self.name == 'test-pdu-02.asg' and func.__name__ in ['_watch_powerfeeds']:
-            #     logger.debug(
-            #         '%s: immediate %s, last_called %s', func_hash, immediate, last_called['immediate'])
-            is_immediate = is_immediate or not getattr(
-                self, 'is_initialized', True)
             if now - last_called['time'] > interval or (is_immediate and not last_called['immediate']):
                 last_called['immediate'] = immediate
                 last_called['time'] = now
-                result: Any = await func(self, *args, **kwargs)
-                last_called['result'] = result
-            last_called['is_running'] = False
+                try:
+                    last_called['is_running'] = True
+                    result: Any = await func(self, *args, **kwargs)
+                    last_called['result'] = result
+                except:
+                    raise
+                finally:
+                    last_called['is_running'] = False
             return (func.__name__, last_called['result'])
         wrapper.__name__ = 'memoize_' + func.__name__
         return wrapper
