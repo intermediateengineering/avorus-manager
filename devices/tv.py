@@ -29,7 +29,6 @@ class LGWebOSTV(WOLable):
 
     async def online_event(self, _, event_type, value):
         if event_type == 'is_online':
-            logger.debug('%s %s', event_type, value)
             await self.set_should_wake(self.should_wake and not value not in [DeviceState.PARTIAL, DeviceState.ON])
             await self.set_should_shutdown(self.should_shutdown and value not in [DeviceState.OFF, DeviceState.PARTIAL])
             if value == DeviceState.PARTIAL and not self.is_connected:
@@ -97,7 +96,6 @@ class LGWebOSTV(WOLable):
         logger.debug(value)
         is_online = DeviceState.ON if value else DeviceState.PARTIAL
         self._state['is_registered'] = value
-        logger.debug('set_is_online %s', is_online)
         self.loop.create_task(self.set_is_online(is_online))
         self.loop.create_task(self.event('is_registered', value))
 
@@ -125,7 +123,6 @@ class LGWebOSTV(WOLable):
         self.syscontrol.power_off(callback=self.on_shutdown_received)
 
     async def fetch(self):
-        await self.event('is_online', self.is_online)
+        await super().fetch()
         await self.event('should_wake', self.should_wake)
         await self.event('should_shutdown', self.should_shutdown)
-        await self.event('capabilities', self.capabilities)
