@@ -1,0 +1,16 @@
+- label: 'Group by'
+  slug: 'group_by_tag_description'
+  description: 'Description of the Tag that is used for device grouping'
+  value: 'Element'
+- label: 'Device mapping'
+  slug: 'device_map'
+  description: 'Rules that determine how to communicate with devices'
+  value:
+    BrightSign: []
+    Computer: []
+    Device: []
+    GudePDU: []
+    ICMPable: []
+    LGWebOSTV: []
+    PJLink: []
+    WOLable: []
