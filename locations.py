@@ -75,7 +75,7 @@ class Location:
                 return
             logger.debug('%s location %s', __name, self.name)
             elements = [tag for tag in self.tags
-                        if tag.description == 'E-Nummer']  # TODO make this configurable
+                        if tag.description == self.manager.config['group_by_tag_description']['value']]
             async with asyncio.TaskGroup() as tg:
                 for element in elements:
                     tg.create_task(getattr(element, __name)(**kwargs))
