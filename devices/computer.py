@@ -236,9 +236,7 @@ class Computer(WOLable):
         await self.client.publish(f'{self.probe_address}/unmute', qos=1)
 
     async def fetch(self):
-        await self.event('capabilities', self.capabilities)
-        await self.event('is_online', self.is_online)
-        await self.event('should_wake', self.should_wake)
+        await super().fetch()
         await self.event('should_shutdown', self.should_shutdown)
         await self.event('should_reboot', self.should_reboot)
         await self.event('is_muted', self._state['is_muted'])

@@ -170,6 +170,6 @@ class GudePDU(ICMPable):
         return self._state['powerfeeds'][id] != value
 
     async def fetch(self):
-        await self.event('is_online', self.is_online)
+        await super().fetch()
         if self.is_online == DeviceState.ON:
             await self.event('powerfeeds', self._state['powerfeeds'])

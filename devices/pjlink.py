@@ -235,8 +235,8 @@ class PJLink(Device):
         task.add_done_callback(power_off_done)
 
     async def fetch(self):
-        await self.event('capabilities', self.capabilities)
-        await self.event('is_online', self.is_online)
+        await super().fetch()
         await self.event('should_wake', self.should_wake)
         await self.event('errors', self._state['errors'])
+        await self.event('lamps', self._state['lamps'])
         await self.event('ires', self._state['ires'])

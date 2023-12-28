@@ -72,6 +72,5 @@ class WOLable(ICMPable):
         task.add_done_callback(self._delete_task('wake'))
 
     async def fetch(self):
-        await self.event('is_online', self.is_online)
+        await super().fetch()
         await self.event('should_wake', self.should_wake)
-        await self.event('capabilities', self.capabilities)

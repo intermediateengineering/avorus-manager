@@ -30,3 +30,6 @@ class ICMPable(Device):
                 await self.set_is_online(DeviceState.ON if await ping_address(address) else DeviceState.OFF)
             else:
                 return False
+    
+    async def fetch(self):
+        await super().fetch()
