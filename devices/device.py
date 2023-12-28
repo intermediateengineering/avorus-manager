@@ -134,5 +134,6 @@ class Device(EventMixin, ErrorMixin, PowerMixin, CalendarMixin):
                 task.add_done_callback(self._delete_task(task_name))
 
     async def fetch(self, *_, **__):
+        await self.event('class', self.__class__.__name__)
         await self.event('capabilities', self.capabilities)
         await self.event('is_online', self.is_online)
