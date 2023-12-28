@@ -4,7 +4,6 @@ from typing import Any, Callable
 from aiomqtt import Client
 from devices.mixins import ErrorMixin, EventMixin, PowerMixin, CalendarMixin
 
-from misc import logger
 from locations import Location
 from .state import DeviceState
 
@@ -117,11 +116,9 @@ class Device(EventMixin, ErrorMixin, PowerMixin, CalendarMixin):
 
     def _delete_task(self, task_name):
         def wrap(_):
-            try:
+            if task_name in self.tasks:
                 self.tasks[task_name].cancel()
                 del self.tasks[task_name]
-            except Exception:
-                pass
         return wrap
 
     async def update(self):
