@@ -14,9 +14,6 @@ FORMAT = '%(asctime)s.%(msecs)03d:%(levelname)s:%(filename)s:%(lineno)s:%(funcNa
 logging.basicConfig(level=logging.DEBUG, format=FORMAT,
                     datefmt='%y-%m-%d %H:%M:%S')
 
-device_map: dict[str, list[dict[str, Any]]] = yaml.load(
-    open('device_map.yml'), Loader=yaml.Loader)
-
 
 def recursive_get(d, *keys):
     return reduce(lambda c, k: c.get(k, {}), keys, d)
@@ -29,7 +26,14 @@ def compare_fields(a: str | list[dict[str, str]], b: str):
         return a == b
 
 
-def get_device_class(device) -> str:
+def get_config():
+    config = {}
+    for item in yaml.load(open('./config/config.yml'), Loader=yaml.Loader):
+        config[item['slug']] = item
+    return config
+
+
+def get_device_class(device_map, device) -> str:
     for device_class, all_filters in device_map.items():
         for filter in all_filters:
             match = all([
@@ -39,7 +43,7 @@ def get_device_class(device) -> str:
             ])
             if match:
                 return device_class
-    return 'ICMPable'
+    return 'Device'
 
 
 class BroadcastEvent(list):
