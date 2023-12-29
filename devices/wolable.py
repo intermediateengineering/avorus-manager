@@ -7,15 +7,14 @@ from misc import logger
 from .device import DeviceState
 from .icmpable import ICMPable
 
-WAKE_INTERVAL = 60
-
 
 class WOLable(ICMPable):
     _capabilities = ['wake']
 
-    def __init__(self, *args, max_time_to_wake: float = 900, **kwargs):
+    def __init__(self, *args, wake_interval: float = 60, max_time_to_wake: float = 900, **kwargs):
         super().__init__(*args, **kwargs)
         self._state['should_wake'] = False
+        self.intervals['wake_interval'] = wake_interval
         self.timeouts['wake'] = max_time_to_wake
         self.event.append(self.online_event)
 
@@ -45,7 +44,7 @@ class WOLable(ICMPable):
                             send_magic_packet(mac_address)
                         else:
                             await self.set_should_wake(False)
-                    await asyncio.sleep(WAKE_INTERVAL)
+                    await asyncio.sleep(self.intervals['wake_interval'])
                 elif self.is_online == DeviceState.ON:
                     await self.set_should_wake(False)
 

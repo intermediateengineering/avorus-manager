@@ -55,7 +55,7 @@ class Manager:
 
     async def setup(self, initial=False):
         self.config = get_config()
-        self.device_map = self.config['device_map']['value']
+        self.device_map = self.config['device_map']
         await self.lock.acquire()
         try:
             response = self.api.get('/api/')
@@ -126,15 +126,17 @@ class Manager:
             device_class_name,
             Device
         )
+        device_options = self.config['device_options'].get(device_class_name, {})
         if device_id in self.devices and device_class != type(self.devices[device_id]):
             await self.devices[device_id].cancel()
             del self.devices[device_id]
         if device_id not in self.devices:
             self.devices[device_id] = device_class(
-                self, self.client, self.device_event, **device)
+                self, self.client, self.device_event, **device, **device_options)
             act = 'Subscribed'
         else:
-            self.devices[device_id].set_data(device)
+            self.devices[device_id].set_data(**device_options,
+                                             **device)
             act = 'Updated'
         await self.devices[device_id].setup()
         logger.debug(f'{act} device: %s %s %s',

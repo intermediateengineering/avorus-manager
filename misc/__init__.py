@@ -31,10 +31,18 @@ def compare_fields(a: str | list[dict[str, str]], b: str):
     else:
         return a == b
 
+
+def list_to_dict(values):
+    return {
+            value['slug']: list_to_dict(value['value'])
+            if type(value['value']) == list else value['value']
+            for value in values
+            if 'slug' in value
+            }
+
+
 def get_config():
-    config = {}
-    for item in yaml.load(open('./config/config.yml'), Loader=yaml.Loader):
-        config[item['slug']] = item
+    config = list_to_dict(yaml.load(open('./config/config.yml'), Loader=yaml.Loader))
     return config
 
 
@@ -45,7 +53,7 @@ def get_device_class(device_map, device) -> str:
                 compare_fields(recursive_get(
                     device, *field_name.split('.')), value)
                 for field_name, value in filter.items()
-            ])
+                ])
             if match:
                 return device_class
     return 'Device'
@@ -79,7 +87,7 @@ def timed(interval: float) -> Callable:
             sleep_time = interval - time_taken
             if sleep_time < 0:
                 logger.error(
-                    'Timed call "%s" took too long: %.2f(s)/%.2f(s)', func.__name__, time_taken, interval)
+                        'Timed call "%s" took too long: %.2f(s)/%.2f(s)', func.__name__, time_taken, interval)
             await asyncio.sleep(max(0, sleep_time))
             return (func.__name__, result)
         wrapper.__name__ = 'timed_' + func.__name__
@@ -90,17 +98,18 @@ def timed(interval: float) -> Callable:
 last_called_dict = {}
 
 
-def memoize(interval: float, immediate_key='') -> Callable:
+def memoize(interval_key: str, immediate_key='') -> Callable:
     def decorator(func):
         async def wrapper(self, *args, **kwargs) -> tuple[str, Any]:
+            interval = self.intervals[interval_key]
             func_hash = self.name + func.__name__
             if func_hash not in last_called_dict:
                 last_called_dict[func_hash] = {
-                    'time': time.time() + random.random() * interval,
-                    'result': None,
-                    'immediate': False,
-                    'is_running': False
-                }
+                        'time': time.time() + random.random() * interval,
+                        'result': None,
+                        'immediate': False,
+                        'is_running': False
+                        }
             last_called = last_called_dict[func_hash]
             if last_called['is_running']:
                 return last_called['result']
@@ -154,7 +163,7 @@ def timeout(method_key: str):
                                  self.name, method_key)
                     await getattr(self, f'set_should_{method_key}')(False)
                     raise MethodCanceled(
-                        method_key, self.name, 'after %.2f(s)' % running_time)
+                            method_key, self.name, 'after %.2f(s)' % running_time)
             if should and not is_timeout:
                 result = await func(self, *args, **kwargs)
                 logger.debug(f'{method_key} %s since %.2f(s)',

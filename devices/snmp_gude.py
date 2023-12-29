@@ -57,20 +57,18 @@ def get_port_state_oid(device_model):
             raise NotImplementedError(device_model)
 
 
-class LoggingDict(dict):
-    def __init__(self, name, *args, **kwargs):
-        super().__init__(*args, **kwargs)
-        self.name = name
-
-    def __setitem__(self, key, value):
-        if self.name == 'test-pdu-02.asg':
-            logger.debug('%s->%s,\n%s', key, value, traceback.format_stack())
-        super().__setitem__(key, value)
-
-
 class GudePDU(ICMPable):
-    def __init__(self, *args, **kwargs):
+    def __init__(self,
+                 *args,
+                 watch_interval: float = 10,
+                 snmp_timeout: float = 5,
+                 snmp_retries: float = 2,
+                 write_powerfeeds_timeout: float = 900,
+                 **kwargs):
         super().__init__(*args, **kwargs)
+        self.intervals['watch'] = watch_interval
+        self.timeouts['write_powerfeeds'] = write_powerfeeds_timeout
+
         self.model = getattr(self, 'device_type')['model']
         try:
             self._state['powerfeeds'] = [-1] * self.num_powerfeeds
@@ -84,7 +82,7 @@ class GudePDU(ICMPable):
         ip = getattr(self, 'primary_ip')
         address = ip['address'].split('/')[0]
         self.snmp_client = aiosnmp.Snmp(
-            host=address, community=PDU_COMMUNITYSTRING, timeout=1, retries=1)
+            host=address, community=PDU_COMMUNITYSTRING, timeout=snmp_timeout, retries=snmp_retries)
 
     @cached_property
     def num_powerfeeds(self):
@@ -120,7 +118,7 @@ class GudePDU(ICMPable):
             self._state['powerfeeds'] = powerfeeds
             await self.event('powerfeeds', self._state['powerfeeds'])
 
-    @memoize(10)
+    @memoize('watch')
     async def _watch_powerfeeds(self):
         if self.is_online == DeviceState.ON:
             await self.lock.acquire()
@@ -136,7 +134,7 @@ class GudePDU(ICMPable):
             return
         messages: Sequence = [(f'{self.port_state_oid}{i+1}', 1 if value else 0)
                               for i, value in enumerate(powerfeeds)]
-        async with asyncio.timeout(WRITE_POWERFEEDS_TIMEOUT):
+        async with asyncio.timeout(self.timeouts['write_powerfeeds']):
             while any([powerfeeds[i] != self._state['powerfeeds'][i] for i in range(self.num_powerfeeds)]):
                 await self.lock.acquire()
                 try:

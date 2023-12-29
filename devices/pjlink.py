@@ -8,9 +8,6 @@ from misc import logger, memoize
 from .device import Device, DeviceState
 from .icmpable import ping_address
 
-WATCH_INTERVAL = 10
-WAKE_INTERVAL = 30
-SHUTDOWN_INTERVAL = 30
 
 initial_state = {
     'errors': {},
@@ -24,12 +21,23 @@ initial_state = {
 class PJLink(Device):
     _capabilities = ['wake', 'shutdown']
 
-    def __init__(self, *args, max_time_to_wake: float = 900, max_time_to_shutdown=900, connection_timeout=10, **kwargs):
+    def __init__(self,
+                 *args,
+                 watch_interval: float = 10,
+                 wake_interval: float = 30,
+                 shutdown_interval: float = 30,
+                 max_time_to_wake: float = 900,
+                 max_time_to_shutdown=900,
+                 connection_timeout=10,
+                 **kwargs):
         super().__init__(*args, **kwargs)
         self._state['should_wake'] = False
         self._state['should_shutdown'] = False
         self._reset_state()
 
+        self.intervals['watch'] = watch_interval
+        self.intervals['wake'] = wake_interval
+        self.intervals['shutdown'] = shutdown_interval
         self.timeouts['wake'] = max_time_to_wake
         self.timeouts['shutdown'] = max_time_to_shutdown
         self.connection_timeout = connection_timeout
@@ -69,7 +77,6 @@ class PJLink(Device):
             except:
                 self._interface = await self._get_interface()
                 raise
-            await self.set_is_online(DeviceState.PARTIAL)
             self.is_open = True
         return self._interface
 
@@ -100,7 +107,7 @@ class PJLink(Device):
                 self._state['warming'] = False
                 self._state['cooling'] = False
 
-    @memoize(WATCH_INTERVAL)
+    @memoize('watch')
     async def _watch(self):
         if await ping_address(self.ip):
             await self._open()
@@ -189,7 +196,7 @@ class PJLink(Device):
             while self.should_wake:
                 if self.is_online in [DeviceState.OFF, DeviceState.PARTIAL]:
                     await self._try_method(inner)
-                    await asyncio.sleep(WAKE_INTERVAL)
+                    await asyncio.sleep(self.intervals['wake'])
                 elif self.is_online == DeviceState.ON:
                     await self.set_should_wake(False)
 
@@ -206,7 +213,7 @@ class PJLink(Device):
                     logger.debug('Try shutdown %s', self.name)
                     await self._try_method(inner)
                     self.power_off(300)
-                    await asyncio.sleep(SHUTDOWN_INTERVAL)
+                    await asyncio.sleep(self.intervals['shutdown'])
                 elif self.is_online in [DeviceState.OFF, DeviceState.PARTIAL]:
                     await self.set_should_shutdown(False)
 
