@@ -1,5 +1,7 @@
 FROM python:3.11-slim
-RUN apt-get update && apt-get install -qq git iputils-ping
+RUN apt-get update && apt-get install --no-install-recommends -qq git iputils-ping curl build-essential
+RUN curl https://sh.rustup.rs -sSf | bash -s -- -y --profile=minimal
+ENV PATH="/root/.cargo/bin:${PATH}"
 RUN pip install --no-cache-dir --upgrade pip
 RUN pip install --no-cache-dir --upgrade \
 	asyncclick==8.1.3.4 \
